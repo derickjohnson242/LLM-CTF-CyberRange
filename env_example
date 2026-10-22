@@ -1,0 +1,12 @@
+# Copy to .env (same folder as docker-compose.yml) and fill in.
+# .env is gitignored, never commit the real one.
+
+# Required. Every student needs this plus a handle to log in. docker compose
+# refuses to start without it. setup-windows.ps1 generates one for you.
+CLASS_PASSCODE=
+
+# Recommended. Signs the gateway's session cookies. If left empty, a random
+# key is generated at every gateway start and all students get logged out
+# whenever the gateway restarts. Generate one with:
+#   python -c "import secrets; print(secrets.token_hex(32))"
+SECRET_KEY=
