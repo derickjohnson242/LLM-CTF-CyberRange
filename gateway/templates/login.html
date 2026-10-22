@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OWASP LLM Top 10: CTF</title>
+<script>
+  (function () {
+    try {
+      var saved = localStorage.getItem('ctf-theme');
+      if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    } catch (e) {}
+  })();
+</script>
+<style>
+  :root {
+    --bg: #f5f6f8; --bg2: #ffffff; --bg3: #eef0f3;
+    --border: #e1e4e9; --text: #1b1f24; --muted: #6b7480;
+    --green: #1a8f4c; --red: #d5392f;
+    --accent: #5b5bf0; --accent2: #8250df;
+    --accent-grad: linear-gradient(135deg, #5b5bf0, #8250df);
+    --shadow-md: 0 12px 32px rgba(20, 20, 40, 0.10);
+    --mono: 'SFMono-Regular', ui-monospace, Consolas, 'Courier New', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e0f13; --bg2: #16181d; --bg3: #1e2128;
+    --border: #2b2f38; --text: #e7e9ee; --muted: #8b93a1;
+    --green: #3ecf7e; --red: #f36a61;
+    --accent: #7c7cff; --accent2: #a684ff;
+    --accent-grad: linear-gradient(135deg, #7c7cff, #a684ff);
+    --shadow-md: 0 16px 40px rgba(0, 0, 0, 0.5);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--sans);
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    position: relative; transition: background 0.2s, color 0.2s;
+  }
+  .icon-btn {
+    position: absolute; top: 1.25rem; right: 1.25rem;
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    font-size: 0.85rem; line-height: 1;
+    width: 34px; height: 34px; border-radius: 9px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.15s, transform 0.1s;
+  }
+  .icon-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+  .card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: var(--shadow-md);
+    padding: 2.25rem; width: 100%; max-width: 360px;
+    text-align: center;
+  }
+  .brand-mark {
+    width: 52px; height: 52px; border-radius: 14px; margin: 0 auto 1rem;
+    background: var(--accent-grad);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+  }
+  h1 { font-size: 1.02rem; font-weight: 700; margin-bottom: 0.25rem; }
+  .subtitle { font-size: 0.78rem; color: var(--muted); margin-bottom: 1.6rem; }
+  label { font-size: 0.72rem; color: var(--muted); font-weight: 600; letter-spacing: 0.3px; display: block; margin-bottom: 0.45rem; text-align: left; }
+  input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 9px;
+    color: var(--text); font-family: var(--mono); font-size: 0.88rem;
+    padding: 0.65rem 0.85rem; margin-bottom: 1.1rem;
+    transition: border-color 0.15s;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  button {
+    width: 100%; background: var(--accent-grad); border: none; border-radius: 9px;
+    color: #fff; font-family: var(--sans); font-size: 0.85rem; font-weight: 600;
+    padding: 0.7rem; cursor: pointer; letter-spacing: 0.2px;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  button:hover { opacity: 0.92; transform: translateY(-1px); }
+  .error {
+    color: var(--red); font-size: 0.78rem; margin-bottom: 1rem;
+    background: color-mix(in srgb, var(--red) 8%, transparent);
+    border: 1px solid var(--red); border-radius: 8px; padding: 0.5rem 0.7rem;
+  }
+</style>
+</head>
+<body>
+  <button type="button" class="icon-btn" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark theme">🌙</button>
+  <div class="card">
+    <div class="brand-mark">🛡️</div>
+    <h1>OWASP LLM Top 10</h1>
+    <p class="subtitle">CTF Training Range</p>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="POST" action="/login">
+      <label>Your Handle</label>
+      <input type="text" name="handle" autofocus required placeholder="your_handle" maxlength="60">
+      <label>Class Passcode</label>
+      <input type="password" name="passcode" required placeholder="••••••••">
+      <button type="submit">Enter Range →</button>
+    </form>
+  </div>
+  <script>
+    function applyThemeIcon() {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      document.getElementById('theme-toggle').textContent = isDark ? '☀️' : '🌙';
+    }
+    function toggleTheme() {
+      const root = document.documentElement;
+      const isDark = root.getAttribute('data-theme') === 'dark';
+      if (isDark) { root.removeAttribute('data-theme'); } else { root.setAttribute('data-theme', 'dark'); }
+      try { localStorage.setItem('ctf-theme', isDark ? 'light' : 'dark'); } catch (e) {}
+      applyThemeIcon();
+    }
+    applyThemeIcon();
+  </script>
+</body>
+</html>

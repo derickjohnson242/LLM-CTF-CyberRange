@@ -1,0 +1,323 @@
+services:
+
+  ollama:
+    # Pinned digest (ollama 0.24.0). No published port: Ollama has no auth, so it's reachable only inside Docker.
+    image: ollama/ollama@sha256:a6149234667efc71d37766d61c1a16f24c33e4cd7a0bf4125c44a7e47e2419c4
+    container_name: ctf-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+    # Joins each challenge network separately; containers don't route between interfaces, so this doesn't bridge them.
+    networks:
+      default: {}
+      group_a_net: {}
+      llm05_net: {}
+      llm03_net: {}
+      llm04_net: {}
+      llm06_net: {}
+      llm08_net: {}
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+
+  model-pull:
+    image: ollama/ollama@sha256:a6149234667efc71d37766d61c1a16f24c33e4cd7a0bf4125c44a7e47e2419c4
+    container_name: ctf-model-pull
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: >
+      sh -c "ollama pull llama3.2:3b && ollama pull nomic-embed-text && echo '✓ Models ready'"
+    restart: "no"
+
+  llm05:
+    build:
+      context: ./challenges/llm05/app
+      dockerfile: Dockerfile
+    container_name: ctf-llm05
+    restart: unless-stopped
+    networks:
+      llm05_net:
+        aliases:
+          - llm05
+      render_net:
+        aliases:
+          - llm05-app
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - MODEL=llama3.2:3b
+      - RENDERER_URL=http://renderer:5010
+    mem_limit: 512m
+    cpus: "0.5"
+    pids_limit: 100
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5005/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # Headless browser for LLM05. Its only network is the internal render_net.
+  renderer:
+    build:
+      context: ./challenges/llm05/renderer
+      dockerfile: Dockerfile
+    container_name: ctf-renderer
+    restart: unless-stopped
+    networks:
+      render_net:
+        aliases:
+          - renderer
+    environment:
+      - CALLBACK_HOST=llm05-app
+      - MAX_CONCURRENT_VISITS=2
+    mem_limit: 1g
+    cpus: "1.0"
+    pids_limit: 200
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5010/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # The only service exposed to students.
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: ctf-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Required: compose refuses to start without CLASS_PASSCODE in .env.
+      - CLASS_PASSCODE=${CLASS_PASSCODE:?set CLASS_PASSCODE in .env}
+      - SECRET_KEY=${SECRET_KEY:-}
+      - RATE_LIMIT_PER_MINUTE=10
+      - RATE_LIMIT_CONCURRENT=1
+    networks:
+      gw_net: {}
+      group_a_net:
+        aliases:
+          - gateway
+      llm05_net:
+        aliases:
+          - gateway
+      llm03_net:
+        aliases:
+          - gateway
+      llm04_net:
+        aliases:
+          - gateway
+      llm06_net:
+        aliases:
+          - gateway
+      llm08_net:
+        aliases:
+          - gateway
+    mem_limit: 256m
+    cpus: "0.5"
+    pids_limit: 50
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  group-a:
+    build:
+      context: ./challenges/group-a
+      dockerfile: Dockerfile
+    container_name: ctf-group-a
+    restart: unless-stopped
+    networks:
+      group_a_net:
+        aliases:
+          - group-a
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - MODEL=llama3.2:3b
+    mem_limit: 768m
+    cpus: "1.0"
+    pids_limit: 150
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  llm03:
+    build:
+      context: ./challenges/llm03
+      dockerfile: Dockerfile
+    container_name: ctf-llm03
+    restart: unless-stopped
+    networks:
+      llm03_net:
+        aliases:
+          - llm03
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - MODEL=llama3.2:3b
+    mem_limit: 512m
+    cpus: "0.5"
+    pids_limit: 100
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5003/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  llm04:
+    build:
+      context: ./challenges/llm04
+      dockerfile: Dockerfile
+    container_name: ctf-llm04
+    restart: unless-stopped
+    networks:
+      llm04_net:
+        aliases:
+          - llm04
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - MODEL=llama3.2:3b
+    mem_limit: 512m
+    cpus: "0.5"
+    pids_limit: 100
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5004/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  llm06:
+    build:
+      context: ./challenges/llm06
+      dockerfile: Dockerfile
+    container_name: ctf-llm06
+    restart: unless-stopped
+    networks:
+      llm06_net:
+        aliases:
+          - llm06
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - MODEL=llama3.2:3b
+    mem_limit: 512m
+    cpus: "0.5"
+    pids_limit: 100
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5006/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  llm08:
+    build:
+      context: ./challenges/llm08
+      dockerfile: Dockerfile
+    container_name: ctf-llm08
+    restart: unless-stopped
+    networks:
+      llm08_net:
+        aliases:
+          - llm08
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - MODEL=llama3.2:3b
+    mem_limit: 512m
+    cpus: "0.5"
+    pids_limit: 100
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5008/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+# Each challenge gets its own internal network shared only with ollama and the gateway.
+networks:
+  default:
+    name: owasp-llm-ctf_default
+  render_net:
+    internal: true
+  gw_net: {}
+  group_a_net:
+    internal: true
+  llm05_net:
+    internal: true
+  llm03_net:
+    internal: true
+  llm04_net:
+    internal: true
+  llm06_net:
+    internal: true
+  llm08_net:
+    internal: true
+
+volumes:
+  ollama_data:
+    driver: local

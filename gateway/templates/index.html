@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OWASP LLM Top 10: CTF</title>
+<script>
+  // Applied before paint to avoid a light->dark flash. Default is light,
+  // we only switch if the viewer previously chose dark themselves.
+  (function () {
+    try {
+      var saved = localStorage.getItem('ctf-theme');
+      if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    } catch (e) {}
+  })();
+</script>
+<style>
+  :root {
+    /* Light theme (default) */
+    --bg: #f5f6f8; --bg2: #ffffff; --bg3: #eef0f3;
+    --border: #e1e4e9; --text: #1b1f24; --muted: #6b7480;
+    --green: #1a8f4c; --red: #d5392f; --amber: #b5720a;
+    --accent: #5b5bf0; --accent2: #8250df;
+    --accent-grad: linear-gradient(135deg, #5b5bf0, #8250df);
+    --shadow: 0 1px 2px rgba(20, 20, 40, 0.05), 0 1px 1px rgba(20,20,40,0.03);
+    --shadow-md: 0 4px 16px rgba(20, 20, 40, 0.08);
+    --mono: 'SFMono-Regular', ui-monospace, Consolas, 'Courier New', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e0f13; --bg2: #16181d; --bg3: #1e2128;
+    --border: #2b2f38; --text: #e7e9ee; --muted: #8b93a1;
+    --green: #3ecf7e; --red: #f36a61; --amber: #e0a730;
+    --accent: #7c7cff; --accent2: #a684ff;
+    --accent-grad: linear-gradient(135deg, #7c7cff, #a684ff);
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--sans);
+    min-height: 100vh; transition: background 0.2s, color 0.2s;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 0.9rem 1.75rem;
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg2);
+  }
+  .brand { display: flex; align-items: center; gap: 0.7rem; }
+  .brand-mark {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: var(--accent-grad);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.05rem; box-shadow: var(--shadow);
+  }
+  .brand-text h1 { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.2px; }
+  .brand-text p { font-size: 0.72rem; color: var(--muted); margin-top: 1px; }
+
+  .header-right { display: flex; align-items: center; gap: 0.6rem; }
+  #header-status { font-size: 0.72rem; color: var(--muted); font-family: var(--mono); }
+
+  .icon-btn {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--sans); font-size: 0.85rem; line-height: 1;
+    width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  }
+  .icon-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+  .logout-btn {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    font-family: var(--sans); font-size: 0.75rem; font-weight: 500; padding: 0.45rem 0.85rem;
+    border-radius: 8px; cursor: pointer; letter-spacing: 0.2px;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .logout-btn:hover { border-color: var(--red); color: var(--red); }
+
+  .layout { display: grid; grid-template-columns: 270px 1fr; min-height: calc(100vh - 65px); }
+
+  /* Sidebar */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    padding: 1.1rem 0.75rem;
+    overflow-y: auto;
+    background: var(--bg2);
+  }
+  .sidebar-title {
+    font-size: 0.65rem; color: var(--muted); padding: 0.3rem 0.5rem 0.7rem;
+    letter-spacing: 1.5px; text-transform: uppercase; font-weight: 600;
+  }
+  .challenge-item {
+    padding: 0.6rem 0.7rem;
+    margin-bottom: 0.25rem;
+    cursor: pointer;
+    border-radius: 9px;
+    transition: background 0.15s, transform 0.1s;
+    display: flex; align-items: center; gap: 0.6rem;
+  }
+  .challenge-item:hover { background: var(--bg3); }
+  .challenge-item.active { background: var(--bg3); box-shadow: inset 0 0 0 1px var(--border); }
+  .challenge-badge {
+    flex-shrink: 0; width: 30px; height: 30px; border-radius: 8px;
+    background: var(--bg); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 0.62rem; font-weight: 700; color: var(--muted);
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .challenge-item.active .challenge-badge { background: var(--accent-grad); border-color: transparent; color: #fff; }
+  .challenge-item.solved .challenge-badge { background: var(--green); border-color: transparent; color: #fff; }
+  .challenge-item-body { flex: 1; min-width: 0; }
+  .challenge-item .name { font-size: 0.78rem; font-weight: 600; color: var(--text); }
+  .challenge-item .check { color: var(--green); font-size: 0.85rem; flex-shrink: 0; }
+
+  /* Main panel */
+  .main { padding: 1.4rem 1.75rem; display: flex; flex-direction: column; gap: 0.9rem; }
+
+  .challenge-header h2 { font-size: 1.02rem; font-weight: 700; margin-bottom: 0.3rem; }
+  .challenge-header .desc { font-size: 0.82rem; color: var(--muted); line-height: 1.55; max-width: 70ch; }
+  .hint-box {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-left: 3px solid var(--amber); border-radius: 0 9px 9px 0;
+    padding: 0.65rem 0.85rem; font-size: 0.78rem; color: var(--muted); line-height: 1.5;
+    display: none;
+  }
+  .hint-box.visible { display: block; }
+
+  /* Student name */
+  .name-row { display: flex; align-items: center; gap: 0.6rem; }
+  .name-row label { font-size: 0.72rem; color: var(--muted); font-weight: 500; white-space: nowrap; }
+  .name-row .handle {
+    font-family: var(--mono); font-size: 0.82rem; font-weight: 600;
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.35rem 0.7rem;
+  }
+
+  /* Chat area */
+  .chat-window {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: var(--shadow);
+    flex: 1; min-height: 320px; max-height: 440px;
+    overflow-y: auto; padding: 1.1rem;
+    display: flex; flex-direction: column; gap: 0.9rem;
+  }
+
+  .row { display: flex; gap: 0.6rem; max-width: 85%; animation: rise 0.2s ease-out; }
+  .row.user { flex-direction: row-reverse; margin-left: auto; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  .avatar {
+    flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; margin-top: 2px;
+  }
+  .avatar.bot { background: var(--accent-grad); color: #fff; }
+  .avatar.user { background: var(--bg3); border: 1px solid var(--border); }
+
+  .bubble {
+    font-size: 0.83rem; line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+    padding: 0.55rem 0.85rem; border-radius: 13px;
+  }
+  .row.bot .bubble { background: var(--bg3); color: var(--text); border-bottom-left-radius: 4px; }
+  .row.user .bubble { background: var(--accent-grad); color: #fff; border-bottom-right-radius: 4px; }
+
+  .sys-row { display: flex; justify-content: center; }
+  .sys-pill {
+    font-size: 0.7rem; color: var(--muted); font-family: var(--mono);
+    background: var(--bg3); border: 1px solid var(--border);
+    padding: 0.3rem 0.7rem; border-radius: 20px;
+    display: flex; align-items: center; gap: 0.4rem;
+  }
+
+  .success-card {
+    background: color-mix(in srgb, var(--green) 10%, var(--bg2));
+    border: 1px solid var(--green); border-radius: 12px;
+    padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.5rem;
+    animation: rise 0.25s ease-out;
+  }
+  .success-card .title { font-size: 0.85rem; font-weight: 700; color: var(--green); display: flex; align-items: center; gap: 0.4rem; }
+  .success-card .flag-chip {
+    font-family: var(--mono); font-size: 0.78rem; background: var(--bg2);
+    border: 1px solid var(--border); border-radius: 8px; padding: 0.45rem 0.65rem;
+    color: var(--text); word-break: break-all;
+  }
+
+  /* Input row */
+  .input-bar {
+    display: flex; align-items: flex-end; gap: 0.5rem;
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: var(--shadow); padding: 0.55rem 0.6rem 0.55rem 1rem;
+  }
+  .input-bar textarea {
+    flex: 1; background: transparent; border: none;
+    color: var(--text); font-family: var(--sans); font-size: 0.85rem;
+    padding: 0.35rem 0; resize: none; min-height: 24px; max-height: 140px;
+  }
+  .input-bar textarea:focus { outline: none; }
+  .input-bar textarea::placeholder { color: var(--muted); }
+
+  .action-row { display: flex; gap: 0.4rem; }
+  .icon-btn.hint { border-color: var(--amber); color: var(--amber); }
+  .icon-btn.clear:hover { border-color: var(--muted); }
+
+  .send-btn {
+    background: var(--accent-grad); border: none; border-radius: 10px;
+    color: #fff; width: 34px; height: 34px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 0.95rem;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  .send-btn:hover { transform: translateY(-1px); }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* Loading spinner */
+  .spinner { display: inline-block; width: 10px; height: 10px; border: 1.5px solid var(--muted); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* curl example */
+  .curl-example {
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.65rem 0.85rem; font-size: 0.7rem; font-family: var(--mono); color: var(--muted);
+    overflow-x: auto; white-space: pre;
+  }
+  .curl-label { font-size: 0.65rem; color: var(--muted); margin-bottom: 0.35rem; letter-spacing: 1px; font-weight: 600; }
+
+  /* Split view (LLM05 live preview) */
+  .main.split-view { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 1rem; }
+  .primary-col { display: flex; flex-direction: column; gap: 0.9rem; min-width: 0; }
+  .preview-pane {
+    display: none; flex-direction: column;
+    border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow);
+    background: var(--bg2); overflow: hidden;
+    min-height: 420px;
+  }
+  .preview-pane.visible { display: flex; }
+  .preview-label { font-size: 0.68rem; color: var(--muted); padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--border); letter-spacing: 0.3px; background: var(--bg3); font-weight: 500; }
+  .preview-pane iframe { flex: 1; min-height: 380px; border: none; background: #fff; }
+  .preview-status { font-size: 0.75rem; padding: 0.6rem 0.85rem; color: var(--muted); border-top: 1px solid var(--border); font-family: var(--mono); }
+  .preview-status.solved { color: var(--green); }
+
+  /* Knowledge-base panel (LLM08) */
+  .kb-panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.6rem; }
+  .kb-title { font-size: 0.9rem; font-weight: 700; }
+  .kb-help { font-size: 0.75rem; color: var(--muted); line-height: 1.5; }
+  .kb-input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: var(--sans); font-size: 0.82rem; padding: 0.5rem 0.7rem; }
+  .kb-input:focus { outline: none; border-color: var(--accent); }
+  .kb-textarea { resize: vertical; font-family: var(--mono); font-size: 0.78rem; }
+  .kb-meta { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--muted); font-family: var(--mono); }
+  .kb-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .kb-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 0.45rem 0.9rem; font-size: 0.78rem; font-weight: 600; cursor: pointer; font-family: var(--sans); }
+  .kb-btn:hover { border-color: var(--accent); }
+  .kb-btn.primary { background: var(--accent-grad); border: none; color: #fff; }
+  .kb-btn.ghost { background: none; color: var(--muted); }
+  .kb-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .kb-result { font-size: 0.78rem; line-height: 1.5; }
+  .kb-result:empty { display: none; }
+  .kb-result .verdict { font-weight: 700; padding: 0.4rem 0.6rem; border-radius: 8px; display: inline-block; margin-bottom: 0.4rem; }
+  .kb-result .verdict.ok { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
+  .kb-result .verdict.no { color: var(--muted); background: var(--bg3); }
+  .kb-result .retrieved { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin-bottom: 0.4rem; }
+  .kb-result .answer { white-space: pre-wrap; background: var(--bg3); border-radius: 8px; padding: 0.55rem 0.7rem; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 20px; right: 20px;
+    background: var(--bg2); border: 1px solid var(--green); color: var(--green);
+    border-radius: 12px; box-shadow: var(--shadow-md);
+    padding: 0.75rem 1.1rem; font-size: 0.82rem; font-weight: 600; display: none; z-index: 200;
+    align-items: center; gap: 0.5rem;
+  }
+  .toast.show { display: flex; animation: rise 0.25s ease-out; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark">🛡️</div>
+    <div class="brand-text">
+      <h1>OWASP LLM Top 10: CTF Range</h1>
+      <p>Practice exploiting real LLM vulnerabilities</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <span id="header-status">connecting...</span>
+    <button type="button" class="icon-btn" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark theme">🌙</button>
+    <form method="POST" action="/logout" style="margin:0;">
+      <button type="submit" class="logout-btn">Log out</button>
+    </form>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">Challenges</div>
+    {% for c in challenges.values() %}
+    <div class="challenge-item" id="item-{{ c.id }}" onclick="loadChallenge('{{ c.id }}')">
+      <div class="challenge-badge">{{ c.id[3:] }}</div>
+      <div class="challenge-item-body">
+        <div class="name">{{ c.id.upper() }}</div>
+      </div>
+      <span class="check" id="check-{{ c.id }}" style="display:none">✓</span>
+    </div>
+    {% endfor %}
+  </aside>
+
+  <main class="main" id="main-panel">
+    <div class="primary-col">
+      <div class="challenge-header">
+        <h2 id="ch-name">Select a challenge →</h2>
+        <p class="desc" id="ch-desc">Choose a challenge from the sidebar to begin.</p>
+      </div>
+
+      <div class="name-row">
+        <label>LOGGED IN AS</label>
+        <span class="handle">{{ student }}</span>
+      </div>
+
+      <div class="chat-window" id="chat-window">
+        <div class="sys-row"><span class="sys-pill">Select a challenge to start attacking the model</span></div>
+      </div>
+
+      <div id="hint-box" class="hint-box"></div>
+
+      <div class="input-bar">
+        <textarea id="user-input" placeholder="Type your attack prompt here..." disabled rows="1"></textarea>
+        <div class="action-row">
+          <button class="icon-btn hint" onclick="toggleHint()" id="hint-btn" disabled title="Show hint">💡</button>
+          <button class="icon-btn clear" onclick="clearChat()" title="Clear chat">🗑️</button>
+          <button class="send-btn" onclick="sendMessage()" id="send-btn" disabled title="Send">➤</button>
+        </div>
+      </div>
+
+      <div id="kb-panel" class="kb-panel" style="display:none">
+        <div class="kb-title">Knowledge base: submit an article</div>
+        <p class="kb-help">Articles you submit are added to the assistant's knowledge base. Only your own articles are searched by "Check submission". Up to 5 articles, 1000 characters each.</p>
+        <input type="text" id="kb-title" class="kb-input" placeholder="Article title" maxlength="120">
+        <textarea id="kb-text" class="kb-input kb-textarea" placeholder="Paste article text here..." maxlength="1000" rows="4"></textarea>
+        <div class="kb-meta"><span id="kb-count">0 / 1000</span><span id="kb-remaining"></span></div>
+        <div class="kb-actions">
+          <button class="kb-btn primary" id="kb-submit" onclick="submitArticle()">Submit article</button>
+          <button class="kb-btn" id="kb-check" onclick="checkSubmission()">Check submission</button>
+          <button class="kb-btn ghost" onclick="resetKb()">Reset my articles</button>
+        </div>
+        <div id="kb-result" class="kb-result"></div>
+      </div>
+
+      <div id="tp-panel" class="kb-panel" style="display:none">
+        <div class="kb-title">Training set: submit an example</div>
+        <p class="kb-help">Question/answer pairs you submit are added to the assistant's few-shot training examples. "Check generalization" asks a fixed, unrelated question to see whether your example changed that answer too. Up to 5 examples, 300 characters each.</p>
+        <input type="text" id="tp-question" class="kb-input" placeholder="Example question" maxlength="300">
+        <textarea id="tp-answer" class="kb-input kb-textarea" placeholder="The 'correct' answer you want the assistant to learn..." maxlength="300" rows="3"></textarea>
+        <div class="kb-meta"><span id="tp-count">0 / 300</span><span id="tp-remaining"></span></div>
+        <div class="kb-actions">
+          <button class="kb-btn primary" id="tp-submit" onclick="submitExample()">Submit example</button>
+          <button class="kb-btn" id="tp-check" onclick="checkGeneralization()">Check generalization</button>
+          <button class="kb-btn ghost" onclick="resetTp()">Reset my examples</button>
+        </div>
+        <div id="tp-result" class="kb-result"></div>
+      </div>
+
+      <div id="curl-section" style="display:none">
+        <div class="curl-label">CURL EQUIVALENT</div>
+        <div class="curl-example" id="curl-example"></div>
+      </div>
+    </div>
+
+    <div class="preview-pane" id="preview-pane">
+      <div class="preview-label">LIVE PREVIEW: what the headless browser actually visits (sandboxed, separate origin)</div>
+      <iframe id="preview-frame" sandbox="allow-scripts" src="about:blank"></iframe>
+      <div class="preview-status" id="preview-status">// send a message to render a preview</div>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  let currentChallenge = null;
+  let hintVisible = false;
+  let llm05PollTimer = null;
+  const challenges = {{ challenges | tojson }};
+
+  // ── Theme ──────────────────────────────────────────────────────────────────
+  function applyThemeIcon() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    document.getElementById('theme-toggle').textContent = isDark ? '☀️' : '🌙';
+  }
+  function toggleTheme() {
+    const root = document.documentElement;
+    const isDark = root.getAttribute('data-theme') === 'dark';
+    if (isDark) {
+      root.removeAttribute('data-theme');
+    } else {
+      root.setAttribute('data-theme', 'dark');
+    }
+    try { localStorage.setItem('ctf-theme', isDark ? 'light' : 'dark'); } catch (e) {}
+    applyThemeIcon();
+  }
+  applyThemeIcon();
+
+  // Check health on load
+  fetch('/health').then(r => r.json()).then(d => {
+    const el = document.getElementById('header-status');
+    el.textContent = `● ${d.challenges_registered} challenges online`;
+    el.style.color = 'var(--green)';
+  }).catch(() => {
+    const el = document.getElementById('header-status');
+    el.textContent = '● gateway error';
+    el.style.color = 'var(--red)';
+  });
+
+  function loadChallenge(id) {
+    currentChallenge = id;
+    const c = challenges[id];
+    document.getElementById('ch-name').textContent = c.name;
+    document.getElementById('ch-desc').textContent = c.description;
+    document.querySelectorAll('.challenge-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('item-' + id).classList.add('active');
+    document.getElementById('user-input').disabled = false;
+    document.getElementById('send-btn').disabled = false;
+    document.getElementById('hint-btn').disabled = false;
+    document.getElementById('hint-box').textContent = '💡 ' + c.hint;
+    document.getElementById('hint-box').classList.remove('visible');
+    hintVisible = false;
+    clearChat();
+    addSysMsg(`Challenge loaded: ${c.name}. Attack the model below.`);
+    updateCurl('');
+    document.getElementById('curl-section').style.display = 'block';
+
+    if (llm05PollTimer) { clearInterval(llm05PollTimer); llm05PollTimer = null; }
+    const mainPanel = document.getElementById('main-panel');
+    const previewPane = document.getElementById('preview-pane');
+    document.getElementById('kb-panel').style.display = id === 'llm08' ? 'flex' : 'none';
+    document.getElementById('kb-result').innerHTML = '';
+    document.getElementById('tp-panel').style.display = id === 'llm04' ? 'flex' : 'none';
+    document.getElementById('tp-result').innerHTML = '';
+    if (id === 'llm05') {
+      mainPanel.classList.add('split-view');
+      previewPane.classList.add('visible');
+      document.getElementById('preview-frame').src = 'about:blank';
+      document.getElementById('preview-status').textContent = '// send a message to render a preview';
+      document.getElementById('preview-status').classList.remove('solved');
+    } else {
+      mainPanel.classList.remove('split-view');
+      previewPane.classList.remove('visible');
+    }
+  }
+
+  function scrollChat() {
+    const win = document.getElementById('chat-window');
+    win.scrollTop = win.scrollHeight;
+  }
+
+  function addMsg(role, content) {
+    // role: 'user' | 'bot'
+    const win = document.getElementById('chat-window');
+    const row = document.createElement('div');
+    row.className = 'row ' + role;
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar ' + role;
+    avatar.textContent = role === 'user' ? '🙂' : '🤖';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = content;
+    row.appendChild(avatar);
+    row.appendChild(bubble);
+    win.appendChild(row);
+    scrollChat();
+    return row;
+  }
+
+  function addSysMsg(text) {
+    const win = document.getElementById('chat-window');
+    const row = document.createElement('div');
+    row.className = 'sys-row';
+    row.innerHTML = `<span class="sys-pill">${text}</span>`;
+    win.appendChild(row);
+    scrollChat();
+    return row;
+  }
+
+  function addSuccessMsg(points, flag) {
+    const win = document.getElementById('chat-window');
+    const card = document.createElement('div');
+    card.className = 'success-card';
+    card.innerHTML =
+      `<div class="title">🚩 Challenge solved!</div>` +
+      `<div class="flag-chip">${flag}</div>`;
+    win.appendChild(card);
+    scrollChat();
+  }
+
+  function clearChat() {
+    document.getElementById('chat-window').innerHTML = '';
+  }
+
+  function toggleHint() {
+    hintVisible = !hintVisible;
+    document.getElementById('hint-box').classList.toggle('visible', hintVisible);
+  }
+
+  function updateCurl(msg) {
+    const payload = JSON.stringify({ message: msg || '<your attack prompt>' });
+    const host = window.location.host;
+    document.getElementById('curl-example').textContent =
+      `curl -s -b cookies.txt -X POST http://${host}/challenge/${currentChallenge || 'llm01'}/chat \\\n` +
+      `  -H "Content-Type: application/json" \\\n` +
+      `  -d '${payload}'`;
+  }
+
+  async function sendMessage() {
+    if (!currentChallenge) return;
+    const input = document.getElementById('user-input');
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    input.value = '';
+    addMsg('user', msg);
+    updateCurl(msg);
+
+    const thinkingRow = addSysMsg('<span class="spinner"></span> model thinking...');
+
+    try {
+      const r = await fetch(`/challenge/${currentChallenge}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg }),
+      });
+      const d = await r.json();
+      thinkingRow.remove();
+      if (!r.ok) { addSysMsg('⚠️ ' + (d.error || `Request failed (${r.status})`)); return; }
+      addMsg('bot', d.response);
+      if (d.solved) {
+        addSuccessMsg(d.points, d.flag);
+        document.getElementById('check-' + currentChallenge).style.display = 'inline';
+        document.getElementById('item-' + currentChallenge).classList.add('solved');
+      }
+      if (d.attempt_id && currentChallenge === 'llm05') {
+        document.getElementById('preview-frame').src = d.preview_url;
+        document.getElementById('preview-status').textContent = '// rendered. Headless browser is visiting now...';
+        document.getElementById('preview-status').classList.remove('solved');
+        pollLlm05Status(d.attempt_id);
+      }
+    } catch (e) {
+      thinkingRow.remove();
+      addSysMsg('⚠️ Error: ' + e.message);
+    }
+  }
+
+  function pollLlm05Status(attemptId) {
+    if (llm05PollTimer) clearInterval(llm05PollTimer);
+    llm05PollTimer = setInterval(async () => {
+      try {
+        const r = await fetch(`/challenge/llm05/status/${attemptId}`);
+        const d = await r.json();
+        if (d.solved) {
+          clearInterval(llm05PollTimer);
+          llm05PollTimer = null;
+          const statusEl = document.getElementById('preview-status');
+          statusEl.textContent = '// XSS confirmed: canary cookie exfiltrated to callback';
+          statusEl.classList.add('solved');
+          if (currentChallenge === 'llm05') {
+            addSuccessMsg(d.points, d.flag);
+            document.getElementById('check-llm05').style.display = 'inline';
+            document.getElementById('item-llm05').classList.add('solved');
+          }
+          showToast('🚩 Flag captured: XSS confirmed');
+        }
+      } catch (e) {
+        // transient network hiccup while polling, ignore and retry
+      }
+    }, 1500);
+  }
+
+  // ── Knowledge base (LLM08) ───────────────────────────────────────────────
+  const kbText = document.getElementById('kb-text');
+  kbText.addEventListener('input', () => {
+    document.getElementById('kb-count').textContent = `${kbText.value.length} / 1000`;
+  });
+
+  function kbResult(html) {
+    document.getElementById('kb-result').innerHTML = html;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  async function submitArticle() {
+    const title = document.getElementById('kb-title').value.trim();
+    const text = kbText.value.trim();
+    if (!title || !text) { kbResult('<span class="verdict no">Enter both a title and article text.</span>'); return; }
+    const r = await fetch('/challenge/llm08/insert', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, text }),
+    });
+    const d = await r.json();
+    if (!r.ok) { kbResult(`<span class="verdict no">${escapeHtml(d.error || 'Submission failed')}</span>`); return; }
+    document.getElementById('kb-remaining').textContent = `${d.inserts_remaining} submissions left`;
+    kbResult(`<span class="verdict ok">Article submitted (#${d.doc_id}). Click "Check submission" to test it.</span>`);
+  }
+
+  async function checkSubmission() {
+    const btn = document.getElementById('kb-check');
+    btn.disabled = true;
+    kbResult('<span class="spinner"></span> running verification query...');
+    try {
+      const r = await fetch('/challenge/llm08/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      });
+      const d = await r.json();
+      if (!r.ok) { kbResult(`<span class="verdict no">${escapeHtml(d.error || `Request failed (${r.status})`)}</span>`); return; }
+      const retrieved = (d.retrieved_titles || []).map(escapeHtml).join(' · ');
+      let html = `<div class="retrieved">retrieved: ${retrieved}</div>`;
+      html += d.solved
+        ? `<span class="verdict ok">Solved. Flag: ${escapeHtml(d.flag)}</span>`
+        : `<span class="verdict no">Not solved yet. ${d.planted_document_retrieved ? 'Your article was retrieved, but the answer did not contain the target code.' : 'Your article was not retrieved for the verification question.'}</span>`;
+      html += `<div class="answer">${escapeHtml(d.response || '')}</div>`;
+      kbResult(html);
+      if (d.solved) {
+        document.getElementById('check-llm08').style.display = 'inline';
+        document.getElementById('item-llm08').classList.add('solved');
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function resetKb() {
+    await fetch('/challenge/llm08/reset', { method: 'POST' });
+    document.getElementById('kb-remaining').textContent = '';
+    kbResult('<span class="verdict no">Your articles were removed.</span>');
+  }
+
+  // ── Training set (LLM04) ─────────────────────────────────────────────────
+  const tpAnswer = document.getElementById('tp-answer');
+  tpAnswer.addEventListener('input', () => {
+    document.getElementById('tp-count').textContent = `${tpAnswer.value.length} / 300`;
+  });
+
+  function tpResult(html) {
+    document.getElementById('tp-result').innerHTML = html;
+  }
+
+  async function submitExample() {
+    const question = document.getElementById('tp-question').value.trim();
+    const answer = tpAnswer.value.trim();
+    if (!question || !answer) { tpResult('<span class="verdict no">Enter both a question and an answer.</span>'); return; }
+    const r = await fetch('/challenge/llm04/insert', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, answer }),
+    });
+    const d = await r.json();
+    if (!r.ok) { tpResult(`<span class="verdict no">${escapeHtml(d.error || 'Submission failed')}</span>`); return; }
+    document.getElementById('tp-remaining').textContent = `${d.inserts_remaining} submissions left`;
+    tpResult(`<span class="verdict ok">Example submitted (#${d.ex_id}). Click "Check generalization" to test it.</span>`);
+  }
+
+  async function checkGeneralization() {
+    const btn = document.getElementById('tp-check');
+    btn.disabled = true;
+    tpResult('<span class="spinner"></span> asking the fixed verification question...');
+    try {
+      const r = await fetch('/challenge/llm04/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      });
+      const d = await r.json();
+      if (!r.ok) { tpResult(`<span class="verdict no">${escapeHtml(d.error || `Request failed (${r.status})`)}</span>`); return; }
+      let html = `<div class="retrieved">verification question: ${escapeHtml(d.verify_query || '')}</div>`;
+      html += d.solved
+        ? `<span class="verdict ok">Solved. Flag: ${escapeHtml(d.flag)}</span>`
+        : `<span class="verdict no">Not solved yet. The answer to the unrelated question did not reflect your example.</span>`;
+      html += `<div class="answer">${escapeHtml(d.response || '')}</div>`;
+      tpResult(html);
+      if (d.solved) {
+        document.getElementById('check-llm04').style.display = 'inline';
+        document.getElementById('item-llm04').classList.add('solved');
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function resetTp() {
+    await fetch('/challenge/llm04/reset', { method: 'POST' });
+    document.getElementById('tp-remaining').textContent = '';
+    tpResult('<span class="verdict no">Your training examples were removed.</span>');
+  }
+
+  function showToast(text) {
+    const t = document.getElementById('toast');
+    t.textContent = text;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 4000);
+  }
+
+  const inputEl = document.getElementById('user-input');
+  inputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+  inputEl.addEventListener('input', () => {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
+  });
+</script>
+</body>
+</html>
